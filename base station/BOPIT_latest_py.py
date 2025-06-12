@@ -66,7 +66,7 @@ io.setup(pullPin_board, io.IN, pull_up_down=io.PUD_UP)
 io.setup(twistPin_board, io.IN, pull_up_down=io.PUD_UP)
 
 shutdownPin = 40
-#io.setup(shutdownPin, io.IN, pull_up_down=io.PUD_UP)
+io.setup(shutdownPin, io.IN, pull_up_down=io.PUD_UP)
 # add event after def game_shutdown
 
 pins_randomList = [] # create shuffled list after selecting nTrys
@@ -80,6 +80,8 @@ results = [[],[]] # 0 is time at hit, 1 is release
 entrySound.play()
 port.flushInput() # Serial port has a buffer so we need to clear it
 port.write(str.encode("page "+"welcome")+eof) # move to the game starting screen when we start running
+
+noTimeOutFlag = 0
 
 def check_serial():
     msg = ''
@@ -127,7 +129,7 @@ def button_handler(pinNumber_board, pin2hit, timer): # pinNumber_board = from bo
     sleep(0.05)
     # print('gtime  end  in handler for pin {}, timer {:.3f} {:.3f}'.format(pin2hit, time() - timer, time() - dct['tTotal']))
     
-def playgame():
+def playgame(noTimeOutFlag):
     print('play game starts here, welcome screen')
     results[0] = []
     results[1] = [] # 0 is time at hit, 1 is release
@@ -139,9 +141,26 @@ def playgame():
     
     ready_yet = 3 # change this in Nextion
     while ready_yet == 3:
-        dct['t2hit'] = int(check_serial())
-        dct['nTrys'] = int(check_serial())
-        ready_yet = int(check_serial())
+        recieved = str(check_serial())
+        print(recieved);
+        rec_dic = dict()
+        rec_dic["Com"] = recieved.split()[0]
+        if (len(recieved.split())== 2):          
+            rec_dic["val"] = recieved.split()[1]
+        
+        if (rec_dic["Com"] == "ntim"):
+            dct['t2hit'] = int(rec_dic["val"])
+        elif (rec_dic["Com"] == "nreps"):
+            dct['nTrys'] = int(rec_dic["val"])
+        elif (recieved == "done"):
+            break;
+        
+    if (dct['t2hit'] == 0):
+        noTimeOutFlag = 1
+        #dct['t2hit'] = int(check_serial())
+        #dct['nTrys'] = int(check_serial())
+        #ready_yet = int(check_serial())
+        
 
     shuffle_pinList(dct['nTrys'])
 
@@ -179,11 +198,13 @@ def playgame():
             end_game = port.readline() # read(3)
             dct['end'] = end_game.decode("iso-8859-1") # end this while loop
             if (time() - timer) > dct['t2hit']:
-                print('too long, global timer'.format(time() - dct['tTotal']))
-                timesUpSound.play()
-                dct['timeouts'] += 1
+                if noTimeOutFlag == 0:
+                    print('too long, global timer'.format(time() - dct['tTotal']))
+                    timesUpSound.play()
+                    dct['timeouts'] += 1
+                    break
                 results[0].append(time() - timer)
-                break
+                
             if not io.input(pushPin_board) and pushStatePrev:
                 button_handler(pushPin_board, pin2hit, timer)
                 break
@@ -207,7 +228,10 @@ def playgame():
     sum = 0
     n = 0
     for i in results[0]:
-        if 0 < i < dct['t2hit']: # only correct hits
+        if 0 < i < dct['t2hit'] and (noTimeOutFlag == 0): # only correct hits
+            sum += i
+            n += 1
+        if (noTimeOutFlag == 1):
             sum += i
             n += 1
     if n > 0:
@@ -223,13 +247,13 @@ def playgame():
 
     # for i, res in enumerate(results[0]):
         # print('{} {:.2f} {:.2f}'.format(i, res, results[1][i]))
-#io.add_event_detect(shutdownPin, io.FALLING, callback=game_shutdown, bouncetime=50)
+io.add_event_detect(shutdownPin, io.FALLING, callback=game_shutdown, bouncetime=50)
     
 # ======START GAME HERE========
 try:
     while dct['end'] != "yes":
         print('main loop, playgame inside dct[end]',dct['end'])
-        playgame()
+        playgame(noTimeOutFlag)
         afterPlaygameSound.play() #yay.wav
         p.i2c_write_byte(0, 4) # turn all lights off
         p.i2c_write_byte(0, 5) 
