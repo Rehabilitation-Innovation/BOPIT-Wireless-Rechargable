@@ -12,6 +12,8 @@ import logging
 import random
 import pygame as pg
 
+import wave
+
 import pigpio
 
 p = pigpio.pi()
@@ -20,7 +22,11 @@ p.i2c_open(1, 0x1a)
 
 logging.basicConfig(filename='bopit.log', format='%(asctime)s %(message)s', datefmt='%d%b%Y %H:%M:%S')
 
-pg.mixer.init()
+file_wav = wave.open(soundDir + 'fanfare.wav')
+frequency = file_wav.getframerate()
+
+pg.mixer.init(frequency=frequency)
+
 soundObj = []
 soundObjWrong = []
 soundDir = '/home/bopit/bopit/wavFiles/'
